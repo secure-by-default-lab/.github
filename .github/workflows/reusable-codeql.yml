@@ -1,0 +1,93 @@
+# Reusable CodeQL workflow for the showcase org.
+#
+# Called by per-repo workflows that pass in their language and (for compiled
+# languages) their build command. Centralising this means we update CodeQL
+# config in one place and every repo picks it up automatically.
+#
+# Usage from a calling repo:
+#
+# jobs:
+#   codeql:
+#     uses: secure-by-default-lab/.github/.github/workflows/reusable-codeql.yml@main
+#     with:
+#       language: cpp
+#       build-mode: manual
+#       build-command: make -C src
+#     permissions:
+#       security-events: write
+#       contents: read
+#       actions: read
+
+name: Reusable CodeQL
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "CodeQL language: cpp, csharp, java-kotlin, javascript-typescript, python, ruby, go, swift, actions"
+        required: true
+        type: string
+      build-mode:
+        description: "CodeQL build mode: none (interpreted langs), autobuild, or manual"
+        required: false
+        type: string
+        default: autobuild
+      build-command:
+        description: "Build command when build-mode is manual (e.g. 'make' or 'dotnet build')"
+        required: false
+        type: string
+        default: ""
+      runner:
+        description: "Runner image - ubuntu-latest, windows-latest, macos-latest"
+        required: false
+        type: string
+        default: ubuntu-latest
+      query-suite:
+        description: "CodeQL query suite - default, security-extended, security-and-quality"
+        required: false
+        type: string
+        default: security-and-quality
+
+jobs:
+  analyze:
+    name: Analyze ${{ inputs.language }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # CodeQL needs to know the language and how to build it. For compiled
+      # languages (cpp, csharp) we either let CodeQL try its autobuilder or
+      # we run the build ourselves so CodeQL can trace the compiler.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ inputs.language }}
+          build-mode: ${{ inputs.build-mode }}
+          queries: ${{ inputs.query-suite }}
+          # config-file lets you pull in custom queries later if you want
+          # to add CRA-specific or domain-specific rules.
+          # config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Run manual build
+        if: inputs.build-mode == 'manual' && inputs.build-command != ''
+        shell: bash
+        run: |
+          echo "Running manual build: ${{ inputs.build-command }}"
+          ${{ inputs.build-command }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ inputs.language }}"
+          # Upload SARIF even when alerts found - we want every run visible
+          # in the Security tab regardless of finding count.
+          upload: always
