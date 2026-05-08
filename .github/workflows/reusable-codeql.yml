@@ -58,7 +58,6 @@ jobs:
       security-events: write
       contents: read
       actions: read
-      packages: read
 
     steps:
       - name: Checkout repository
